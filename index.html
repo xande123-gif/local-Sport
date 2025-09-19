@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <title>Mapa Esportivo Porto Alegre</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
+    /* Estilos permanecem os mesmos */
     * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
     body { display: flex; height: 100vh; }
     .mapa { flex: 2; }
-    #map { width: 100%; height: 100%; }
+    #map { width: 100%; height: 100%; background-color: #eee; }
     .barra-pesquisa {
       flex: 1;
       display: flex;
@@ -40,102 +40,145 @@
   </style>
 </head>
 <body>
-  <!-- Mapa -->
   <div class="mapa">
     <div id="map"></div>
   </div>
 
-  <!-- Pesquisa -->
   <div class="barra-pesquisa">
     <h2>Buscar Esporte</h2>
-    <input type="text" id="pesquisa" placeholder="Ex: Corrida, Futebol, Natação...">
+    <input type="text" id="pesquisa" placeholder="Ex: Academia, Futebol, Natação...">
     <div class="resultados" id="listaLocais"></div>
   </div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    // Inicializar mapa
-    const map = L.map('map').setView([-30.0346, -51.2177], 12); // Porto Alegre
+    let map;
+    let placesService;
+    let infoWindow;
+    let markers = []; // Array para guardar os marcadores e poder limpá-los
 
-    // Camada base
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap'
-    }).addTo(map);
+    function initMap() {
+      const portoAlegre = { lat: -30.0346, lng: -51.2177 };
 
-    // Locais esportivos
-    const locais = [
-      // --- Atletismo / corrida ---
-      { nome: "CETE – Centro Estadual de Treinamento Esportivo", esporte: "atletismo", endereco: "Rua Gonçalves Dias, 700", lat: -30.0485, lng: -51.2146 },
-      { nome: "Pista da Redenção (Parque Ramiro Souto)", esporte: "atletismo", endereco: "Avenida Osvaldo Aranha, 969", lat: -30.0332, lng: -51.2177 },
+      // 1. Inicializar o mapa do Google
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: portoAlegre,
+        zoom: 12,
+      });
 
-      // --- Piscinas / natação ---
-      { nome: "Ceprima – Centro Comunitário Primeiro de Maio", esporte: "natação", endereco: "Rua Camoati, 64", lat: -30.0072, lng: -51.1661 },
-      { nome: "Cecoflor – Centro da Vila Floresta", esporte: "natação", endereco: "Rua Irene Capponi Santiago, 290", lat: -30.0091, lng: -51.1465 },
-      { nome: "Cecopam – Parque Madepinho", esporte: "natação", endereco: "Rua Arroio Grande, 50", lat: -30.1124, lng: -51.2128 },
-      { nome: "Cevi – Vila Ingá", esporte: "natação", endereco: "Rua Papa Pio XII, 350", lat: -30.0029, lng: -51.1182 },
-      { nome: "Cecores – Vila Restinga", esporte: "natação", endereco: "Av. Economista Nilo Wulff", lat: -30.1545, lng: -51.1833 },
+      // 2. Inicializar o serviço de busca de locais (Places)
+      placesService = new google.maps.places.PlacesService(map);
+      
+      // 3. Janela de informações para mostrar detalhes no marcador
+      infoWindow = new google.maps.InfoWindow();
 
-      // --- Futebol / quadras ---
-      { nome: "Barra 7 Esportes – Futebol Society", esporte: "futebol", endereco: "Rua Coronel Claudino, 468", lat: -30.0821, lng: -51.2456 },
-      { nome: "HD Quadras Esportivas", esporte: "quadras", endereco: "Rua Visconde Herval, 1083", lat: -30.0444, lng: -51.2172 },
-      { nome: "Sul Sete Quadras Esportivas", esporte: "quadras", endereco: "Av. da Cavalhada, 3330", lat: -30.1203, lng: -51.2331 },
-      { nome: "Quadras da Orla do Guaíba (Trecho 3)", esporte: "futebol", endereco: "Orla do Guaíba", lat: -30.0582, lng: -51.2420 },
-      { nome: "Praça Carlos Simão Arnt (Praça da Encol)", esporte: "quadras", endereco: "Avenida Nilópolis", lat: -30.0242, lng: -51.1838 },
-
-      // --- Clubes / náuticos ---
-      { nome: "AABB Porto Alegre", esporte: "clube, academia, piscina, quadras", endereco: "Av. Coronel Marcos, 1000 – Ipanema", lat: -30.1192, lng: -51.2600 },
-      { nome: "Clube dos Jangadeiros", esporte: "náutico, remo, vela", endereco: "Tristeza", lat: -30.1062, lng: -51.2598 },
-      { nome: "Clube de Regatas Guaíba-Porto Alegre (GPA)", esporte: "remo, náutico", endereco: "Rua João Moreira Maciel, 470 – Navegantes", lat: -30.0051, lng: -51.2036 },
-      { nome: "Grêmio Náutico Gaúcho", esporte: "clube, piscina, quadras", endereco: "Av. Praia de Belas, 1948 – Menino Deus", lat: -30.0511, lng: -51.2284 },
-      { nome: "Grêmio Náutico União", esporte: "clube, piscina, academia", endereco: "R. Quintino Bocaiúva, 500 – Moinhos de Vento", lat: -30.0215, lng: -51.1973 },
-      { nome: "Lindóia Tênis Clube", esporte: "clube, tênis, quadras, piscina", endereco: "Tv. Cmte. Gustavo Cramer, 90 – Jardim Lindóia", lat: -30.0075, lng: -51.1542 },
-      { nome: "Veleiros do Sul", esporte: "náutico, vela", endereco: "Av. Guaíba, 2941 – Vila Assunção", lat: -30.1157, lng: -51.2719 },
-
-      // --- Academias ---
-      { nome: "Academia 10", esporte: "academia", endereco: "Av Loureiro da Silva, 2001 – Cidade Baixa", lat: -30.0427, lng: -51.2211 },
-      { nome: "Academia Ação Física", esporte: "academia", endereco: "Av Bispo João Scalabrini, 380 – Jardim Planalto", lat: -29.9917, lng: -51.1487 },
-      { nome: "Academia Equilíbrio do Corpo", esporte: "academia", endereco: "Rua Itaboraí, 1117 – Jardim Botânico", lat: -30.0515, lng: -51.1806 },
-      { nome: "Academia Mudança", esporte: "academia", endereco: "Av Independência, 831 – Independência", lat: -30.0272, lng: -51.2101 },
-      { nome: "Academia Spazio Attivo", esporte: "academia", endereco: "Rua Dr Jorge Fayet, 542 – Chácara das Pedras", lat: -30.0185, lng: -51.1684 },
-      { nome: "ACM Porto Alegre", esporte: "clube, academia, esportes", endereco: "Rua Washington Luiz, 1050", lat: -30.0331, lng: -51.2235 },
-      { nome: "Fitwell Academia", esporte: "academia", endereco: "Rua dos Andradas, 901 – Centro", lat: -30.0279, lng: -51.2278 },
-      { nome: "Active Academia", esporte: "academia", endereco: "Av do Forte, 966 – Vila Ipiranga", lat: -30.0021, lng: -51.1575 },
-      { nome: "Academia Ducorpo", esporte: "academia", endereco: "Rua Liberal, 3415 – Cavalhada", lat: -30.1148, lng: -51.2360 },
-      { nome: "Academia Gym Power", esporte: "academia, artes marciais", endereco: "Rua José do Patrocínio, 99 – Cidade Baixa", lat: -30.0420, lng: -51.2216 },
-    ];
-
-    // Criar marcadores
-    locais.forEach(local => {
-      local.marker = L.marker([local.lat, local.lng]).addTo(map)
-        .bindPopup(`<b>${local.nome}</b><br>${local.endereco}<br>${local.esporte}`);
-    });
-
-    const listaLocais = document.getElementById('listaLocais');
-    const pesquisa = document.getElementById('pesquisa');
-
-    // Atualizar lista
-    function atualizarLista(filtro = "") {
-      listaLocais.innerHTML = "";
-      locais
-        .filter(l => l.esporte.toLowerCase().includes(filtro.toLowerCase()))
-        .forEach(local => {
-          const div = document.createElement('div');
-          div.className = "local";
-          div.innerHTML = `<strong>${local.nome}</strong><span>${local.endereco} • ${local.esporte}</span>`;
-          div.onclick = () => {
-            map.setView([local.lat, local.lng], 15);
-            local.marker.openPopup();
-            window.open(`https://www.google.com/maps/dir/?api=1&destination=${local.lat},${local.lng}`, '_blank');
-          };
-          listaLocais.appendChild(div);
-        });
+      // 4. Adicionar o listener ao campo de busca
+      const pesquisaInput = document.getElementById('pesquisa');
+      pesquisaInput.addEventListener('input', () => {
+        realizarBusca(pesquisaInput.value);
+      });
     }
 
-    atualizarLista();
+    // Função para realizar a busca na API
+    function realizarBusca(query) {
+      limparResultados(); // Limpa marcadores e lista anteriores
+      
+      if (query.trim() === "") {
+        return; // Não busca se o campo estiver vazio
+      }
 
-    pesquisa.addEventListener("input", e => {
-      atualizarLista(e.target.value);
-    });
+      // Constrói a requisição para a API
+      const request = {
+        query: query + " em Porto Alegre", // Adiciona "em Porto Alegre" para refinar a busca
+        location: map.getCenter(),
+        radius: '10000', // 10km de raio a partir do centro do mapa
+        fields: ['name', 'geometry', 'formatted_address', 'place_id'],
+      };
+
+      // Chama o serviço de busca de texto
+      placesService.textSearch(request, (results, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
+          // Ajusta os limites do mapa para exibir todos os resultados
+          const bounds = new google.maps.LatLngBounds();
+          
+          results.forEach(place => {
+            criarMarcador(place);
+            adicionarLocalNaLista(place);
+            if (place.geometry && place.geometry.location) {
+              bounds.extend(place.geometry.location);
+            }
+          });
+          map.fitBounds(bounds); // Encaixa o mapa nos limites dos marcadores
+        } else {
+            document.getElementById('listaLocais').innerHTML = "Nenhum resultado encontrado.";
+        }
+      });
+    }
+
+    // Limpa a lista e os marcadores do mapa
+    function limparResultados() {
+      document.getElementById('listaLocais').innerHTML = "";
+      markers.forEach(marker => marker.setMap(null));
+      markers = [];
+    }
+    
+    // ===================================================================
+    // AQUI ESTÁ A MUDANÇA PRINCIPAL!
+    // ===================================================================
+    function adicionarLocalNaLista(place) {
+      const listaLocais = document.getElementById('listaLocais');
+      const div = document.createElement('div');
+      div.className = "local";
+      div.innerHTML = `<strong>${place.name}</strong><span>${place.formatted_address}</span>`;
+      
+      div.onclick = () => {
+        // 1. Ação no mapa interno: centraliza e mostra informações (opcional, mas bom para UX)
+        map.setCenter(place.geometry.location);
+        map.setZoom(15);
+        const markerCorrespondente = markers.find(m => m.placeId === place.place_id);
+        if (markerCorrespondente) {
+             infoWindow.setContent(`<b>${place.name}</b><br>${place.formatted_address}`);
+             infoWindow.open(map, markerCorrespondente);
+        }
+
+        // 2. Ação principal: abrir rota no Google Maps em nova aba
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        
+        // Esta URL instrui o Google Maps a traçar uma rota da "localização atual" para o destino
+        const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+
+        // Abre a URL em uma nova aba do navegador
+        window.open(directionsUrl, '_blank');
+      };
+      listaLocais.appendChild(div);
+    }
+
+    // Cria um marcador no mapa para um local
+    function criarMarcador(place) {
+      if (!place.geometry || !place.geometry.location) return;
+
+      const marker = new google.maps.Marker({
+        map: map,
+        position: place.geometry.location,
+        title: place.name,
+      });
+
+      marker.placeId = place.place_id; // Adiciona o place_id para referência futura
+      markers.push(marker); // Adiciona ao array de marcadores
+
+      // Adiciona um evento de clique ao marcador
+      google.maps.event.addListener(marker, "click", () => {
+        // Ao clicar no marcador, também abre a rota
+        const lat = place.geometry.location.lat();
+        const lng = place.geometry.location.lng();
+        const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+        window.open(directionsUrl, '_blank');
+      });
+    }
+  </script>
+
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAu2-3j9EgmfbBNoGkrblXLWB5ZER3KNQU&libraries=places&callback=initMap">
   </script>
 </body>
 </html>
